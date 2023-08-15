@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Button } from '@material-ui/core';
+import React, {useEffect, useState} from 'react';
+import {Button} from '@material-ui/core';
+
 const SERVICE_UUID = '0000ff10-0000-1000-8000-00805f9b34fb';
 
 // OTA 特征 UUID
@@ -8,8 +9,7 @@ const CHAR_UUID = '0000ff11-0000-1000-8000-00805f9b34fb';
 async function getOTAFile() {
     const firmwareFilePath = '/ZLD-05-T.bin';
     const firmwareResponse = await fetch(firmwareFilePath);
-    const firmwareData = await firmwareResponse.arrayBuffer();
-    return firmwareData;
+    return await firmwareResponse.arrayBuffer();
 }
 
 // 计算校验和
