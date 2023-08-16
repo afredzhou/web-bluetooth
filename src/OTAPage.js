@@ -1,35 +1,20 @@
 import React, {useEffect, useState} from 'react';
 import {Button} from '@material-ui/core';
+import  getPacketBytes from './gextindex.js';
+import  {calculateChecksum,getOTAFile} from './getOTAFile.js';
 
 const SERVICE_UUID = '0000ff10-0000-1000-8000-00805f9b34fb';
 
 // OTA 特征 UUID
 const CHAR_UUID = '0000ff11-0000-1000-8000-00805f9b34fb';
 // OTA文件ArrayBuffer
-async function getOTAFile() {
-    const firmwareFilePath = '/ZLD-05-T.bin';
-    const firmwareResponse = await fetch(firmwareFilePath);
-    return await firmwareResponse.arrayBuffer();
-}
+
 
 // 计算校验和
-function calculateChecksum(data) {
-    let sum = 0;
 
-    for (let byte of data) {
-        sum += byte;
-    }
 
-    return sum;
-}
-
-function calculateAndSetChecksum(data) {
-    const checksum = calculateChecksum(data);
-    data[data.length - 1] = checksum;
-    return checksum;
-}
-function OTAPage(value) {
-    const [otaFile, setOtaFile] = useState(null);
+function OTAPage() {
+    const [otaFile, setOtaFile] = useState([]);
 
     useEffect(() => {
         getOTAFile().then(setOtaFile);
@@ -42,39 +27,27 @@ function OTAPage(value) {
     const [sent, setSent] = useState(0); // 已发送数据大小
     const [total, setTotal] = useState(0); // 总大小
     const [server, setServer] = useState(null);
-
+    const [isFinished, setisFinished] = useState(false);
     const startScan = async () => {
         try {
-            // 请求设备连接
             const scannedDevice = await navigator.bluetooth.requestDevice({
-                filters: [{ namePrefix: 'Lumaflex' }]
+                filters: [{ namePrefix: 'Lumaflex' }],
+                optionalServices: [SERVICE_UUID]
             });
+            if (scannedDevice) {
+                setDevice(scannedDevice);
+                const server = await device.gatt.connect();
+                setServer(server);
 
-            setDevice(scannedDevice);
-            const server = await device.gatt;
-            setServer(server);
-            await device.connect();
-            await device.startNotifications();
-            await device.addEventListener('characteristicvaluechanged', (event) => {
+                // 其他代码
 
-                const response = Array.from(event.target.value);
-
-                // 将响应数据设置为 ACK 状态的新值
-                setACK(response);
-                console.log(ACK.toString())
-
-            });
-
-
-            // 获取MTU大小
-            const mtuResp = await server.write(/* OTA start cmd */);
-            setMtu(mtuResp.mtu);
-
+            } else {
+                console.error('User canceled the request or no Bluetooth device was selected.');
+            }
         } catch (error) {
             console.error('Error occurred while requesting Bluetooth device:', error);
         }
     };
-
 
 
 // 启动
@@ -83,14 +56,19 @@ function OTAPage(value) {
 
 // 总长度
         const length = otaFile.byteLength;
+        setTotal(length);
+        // 4字节小端序长度
         const lengthBytes = new Uint8Array(4);
 
-        lengthBytes[0] = length;
-        lengthBytes[1] = length >> 8;
-        lengthBytes[2] = length >> 16;
-        lengthBytes[3] = length >> 24;
+        lengthBytes[0] = length & 0xFF;
+        lengthBytes[1] = (length >> 8) & 0xFF;
+        lengthBytes[2] = (length >> 16) & 0xFF;
+        lengthBytes[3] = (length >> 24) & 0xFF;
 
+
+        console.log(lengthBytes);     //39500
 // 构建启动命令
+
         const data = new Uint8Array([
             0xF1, // opcode
             type,
@@ -105,52 +83,117 @@ function OTAPage(value) {
         // 获取特征值
         const characteristic = await service.getCharacteristic(CHAR_UUID);
         setCharacteristic(characteristic);
-       console.log(newData);
+        // console.log(characteristic);
+        notify(characteristic);
+       // console.log(newData);
         // 写入数据
-        await characteristic.writeValueWithoutResponse(newData);
+        try {
+            if(characteristic.properties.writeWithoutResponse){
+                await characteristic.writeValueWithoutResponse(newData);
+            }
+
+        } catch (error) {
+            console.error('     Start OTA:', error);
+        };
     }
 
+    const notify = async (characteristic) => {
+     await characteristic.startNotifications();
+     await characteristic.addEventListener('characteristicvaluechanged', (event) => {
+
+
+         const dataView = new DataView(event.target.value.buffer);
+         const response = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
+         console.log(dataView);
+
+         const responseArray = Object.values(response);
+         // 将响应数据设置为 ACK 状态的新值
+         setACK(responseArray);
+
+         const hexArrayString = responseArray.map((value) => value.toString(16).toUpperCase().padStart(2, '0'));
+         console.log(hexArrayString);
+
+     });
+
+ }
+// 使用
+    const  Otaprocess = async () => {
+        // await characteristic.stopNotifications();
+        await notify(characteristic);
+        const PACKET_SIZE = 20;// 二进制数组
+        const delay = 100; // ms
+        for(let i = 0; i < 60; i += PACKET_SIZE) {
+        // for(let i = 0; i < otaFile.byteLength; i += PACKET_SIZE) {
+            const packets = [];
+            const start = i ;
+            const end = start + PACKET_SIZE;
+            const packet = otaFile.slice(start, end);
+            await new Promise(resolve => setTimeout(resolve, delay));
+
+            packets.push(packet);
+            // 直接在循环内发送
+            await sendPacket(i, packet);
+            console.log(i);
+            if (i==39460) {
+                // await  notify(characteristic);
+                setisFinished(true);
+
+            }
+
+        } ;
+        await finishOTA();
+
+    }
 
     const sendPacket = async(index, packet) => {
-
+        const packetBytes= new Uint8Array(packet);
+        console.log(packetBytes);
+        const newindex= getPacketBytes(index);
         const data = new Uint8Array([
             0xF2, // 传输opcode
-            index, // 2字节索引
-            ...packet // 数据
+            newindex, // 2字节索引
+            ...packetBytes // 数据
         ]);
 
-        // 计算并设置校验和
-        calculateAndSetChecksum(data);
-        await characteristic.writeValueWithoutResponse(data);
-        // 发送data
-        setSent(sent + packet.length);
-    };
-
-// 使用
-    const  Otaprocess = async (otaFile) => {
-        const packets = otaFile;
-        for (let i = 0; i < packets.length; i++) {
-            await sendPacket(i, packets[i]);
+        // notify(characteristic);
+        const checksum = calculateChecksum(data);// 计算并设置校验和
+        const newData = new Uint8Array([...data, checksum]);
+        try {
+            // 发送data
+            await characteristic.writeValueWithoutResponse(newData);
+        } catch (error) {
+            console.error('Error occurred while sending packet:', error);
         }
-    }
-        const finishOTA = async () => {
-            // 构建结束命令
-            const data = Uint8Array.of(0xF3, 0x01, 0x00);
+        setSent(sent + packetBytes.length);
+    };
+    const finishOTA = async () => {
 
-            await server.writeValueWithoutResponse(data);
+            // 构建结束命令
+        const finishOTAdata = [0xF3, 0x01, 0x00, 0x00];
+          const checksum = calculateChecksum(finishOTAdata);// 计算并设置校验和
+            const newData = new Uint8Array([...finishOTAdata, checksum]);
+
+           try {
+               await characteristic.writeValueWithoutResponse(newData);
+               // await device.gatt.disconnect();
+               console.log('OTA finish button pressed');
+           }catch (e) {
+               console.error('Error occurred while finished OTA:', e);
+           }
+            
         }
 
 
     useEffect(() => {
         let timer;
         if (sent < total) {
-            timer = setInterval(sendPacket, 100);
+            timer = setInterval( 100);
         } else {
             // 发送结束指令
             clearInterval(timer);
         }
         return () => clearInterval(timer);
-    }, [sent]);
+    }, [ isFinished,sent, total]);
 
     return (
         <div>
