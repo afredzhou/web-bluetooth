@@ -1,29 +1,22 @@
 import React, {useEffect, useState} from 'react';
 import {Button} from '@material-ui/core';
 import  getPacketBytes from './gextindex.js';
-import  {calculateChecksum,getOTAFile} from './getOTAFile.js';
-
+import  {getOTAFile} from './getOTAFile.js';
+import  calculateChecksum from 'calculateChecksum.js'
 const SERVICE_UUID = '0000ff10-0000-1000-8000-00805f9b34fb';
 
 // OTA 特征 UUID
 const CHAR_UUID = '0000ff11-0000-1000-8000-00805f9b34fb';
 // OTA文件ArrayBuffer
-
-
-// 计算校验和
-
-
 function OTAPage() {
-    const [otaFile, setOtaFile] = useState([]);
+    const [otaFile, setOtaFile] = useState(null);
 
     useEffect(() => {
-        getOTAFile().then(setOtaFile);
+        getOTAFile().then( (value) => setOtaFile(value));
     }, []);
     const [ACK, setACK] = useState([0x12, 0x34, 0x56]);
-    const [service, setService] = useState(null);
     const [characteristic, setCharacteristic] = useState(null);
     const [device, setDevice] = useState(null);
-    const [mtu, setMtu] = useState(20);
     const [sent, setSent] = useState(0); // 已发送数据大小
     const [total, setTotal] = useState(0); // 总大小
     const [server, setServer] = useState(null);
@@ -79,12 +72,11 @@ function OTAPage() {
         const checksum = calculateChecksum(data);
         const newData = new Uint8Array([...data, checksum]);
         const service = await server.getPrimaryService(SERVICE_UUID);
-        setService(service);
         // 获取特征值
         const characteristic = await service.getCharacteristic(CHAR_UUID);
         setCharacteristic(characteristic);
         // console.log(characteristic);
-        notify(characteristic);
+        await notify(characteristic);
        // console.log(newData);
         // 写入数据
         try {
@@ -94,7 +86,7 @@ function OTAPage() {
 
         } catch (error) {
             console.error('     Start OTA:', error);
-        };
+        }
     }
 
     const notify = async (characteristic) => {
@@ -134,13 +126,30 @@ function OTAPage() {
             // 直接在循环内发送
             await sendPacket(i, packet);
             console.log(i);
-            if (i==39460) {
+            if (i === otaFile.byteLength - 20){
                 // await  notify(characteristic);
                 setisFinished(true);
 
             }
 
-        } ;
+        }for(let i = 0; i < 60; i += PACKET_SIZE) {
+        // for(let i = 0; i < otaFile.byteLength; i += PACKET_SIZE) {
+            const packets = [];
+            const start = i ;
+            const end = start + PACKET_SIZE;
+            const packet = otaFile.slice(start, end);
+            await new Promise(resolve => setTimeout(resolve, delay));
+
+            packets.push(packet);
+            await sendPacket(i, packets);
+            console.log(i);
+            if (i === otaFile.byteLength - 20){
+                // await  notify(characteristic);
+                setisFinished(true);
+
+            }
+
+        }
         await finishOTA();
 
     }
@@ -148,10 +157,10 @@ function OTAPage() {
     const sendPacket = async(index, packet) => {
         const packetBytes= new Uint8Array(packet);
         console.log(packetBytes);
-        const newindex= getPacketBytes(index);
+        const newIndex= getPacketBytes(index);
         const data = new Uint8Array([
             0xF2, // 传输opcode
-            newindex, // 2字节索引
+            newIndex, // 2字节索引
             ...packetBytes // 数据
         ]);
 
@@ -185,9 +194,9 @@ function OTAPage() {
 
 
     useEffect(() => {
-        let timer;
+        let timer =0;
         if (sent < total) {
-            timer = setInterval( 100);
+            timer = setInterval( "100");
         } else {
             // 发送结束指令
             clearInterval(timer);
