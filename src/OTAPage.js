@@ -156,7 +156,7 @@ function OTAPage() {
     const finishOTA = async () => {
 
             // 构建结束命令
-        const finishOTAdata = [0xF3, 0x01, 0x00, 0x00];
+        const finishOTAdata = [0xF3, 0x01, 0x00,];
           const checksum = calculateChecksum(finishOTAdata);// 计算并设置校验和
             const newData = new Uint8Array([...finishOTAdata, checksum]);
 
