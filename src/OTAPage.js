@@ -1,13 +1,12 @@
 import React, {useEffect, useState} from 'react';
 import {Button} from '@material-ui/core';
-import  getPacketBytes from './gextindex.js';
-import  {getOTAFile} from './getOTAFile.js';
+import {getPacketBytes} from './gextindex.js';
+import {getOTAFile} from './getOTAFile.js';
 import  calculateChecksum from 'calculateChecksum.js'
+import {bytesToHexString } from './gextindex'
 const SERVICE_UUID = '0000ff10-0000-1000-8000-00805f9b34fb';
-
-// OTA 特征 UUID
 const CHAR_UUID = '0000ff11-0000-1000-8000-00805f9b34fb';
-// OTA文件ArrayBuffer
+
 function OTAPage() {
     const [otaFile, setOtaFile] = useState(null);
 
@@ -97,13 +96,10 @@ function OTAPage() {
          const dataView = new DataView(event.target.value.buffer);
          const response = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
          console.log(dataView);
-
          const responseArray = Object.values(response);
          // 将响应数据设置为 ACK 状态的新值
          setACK(responseArray);
-
-         const hexArrayString = responseArray.map((value) => value.toString(16).toUpperCase().padStart(2, '0'));
-         console.log(hexArrayString);
+         console.log(bytesToHexString (responseArray));
 
      });
 
@@ -124,23 +120,6 @@ function OTAPage() {
 
             packets.push(packet);
             // 直接在循环内发送
-            await sendPacket(i, packet);
-            console.log(i);
-            if (i === otaFile.byteLength - 20){
-                // await  notify(characteristic);
-                setisFinished(true);
-
-            }
-
-        }for(let i = 0; i < 60; i += PACKET_SIZE) {
-        // for(let i = 0; i < otaFile.byteLength; i += PACKET_SIZE) {
-            const packets = [];
-            const start = i ;
-            const end = start + PACKET_SIZE;
-            const packet = otaFile.slice(start, end);
-            await new Promise(resolve => setTimeout(resolve, delay));
-
-            packets.push(packet);
             await sendPacket(i, packets);
             console.log(i);
             if (i === otaFile.byteLength - 20){
@@ -159,7 +138,6 @@ function OTAPage() {
         console.log(packetBytes);
         const newIndex= getPacketBytes(index);
         const data = new Uint8Array([
-            0xF2, // 传输opcode
             newIndex, // 2字节索引
             ...packetBytes // 数据
         ]);
