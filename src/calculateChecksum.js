@@ -36,6 +36,6 @@ const getOTAStartCommandData = (mOTAData) => {
     console.log("Leave getOTAStartCommandData");
     return ret;
 };
-3
+
 
 export default calculateChecksum ;

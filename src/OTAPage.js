@@ -2,7 +2,7 @@ import React, {useEffect, useState} from 'react';
 import {Button} from '@material-ui/core';
 import {getPacketBytes} from './gextindex.js';
 import {getOTAFile} from './getOTAFile.js';
-import  calculateChecksum from 'calculateChecksum.js'
+import  calculateChecksum from './calculateChecksum.js'
 import {bytesToHexString } from './gextindex'
 const SERVICE_UUID = '0000ff10-0000-1000-8000-00805f9b34fb';
 const CHAR_UUID = '0000ff11-0000-1000-8000-00805f9b34fb';
@@ -91,39 +91,34 @@ function OTAPage() {
     const notify = async (characteristic) => {
      await characteristic.startNotifications();
      await characteristic.addEventListener('characteristicvaluechanged', (event) => {
-
-
          const dataView = new DataView(event.target.value.buffer);
          const response = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
          console.log(dataView);
          const responseArray = Object.values(response);
          // 将响应数据设置为 ACK 状态的新值
          setACK(responseArray);
-         console.log(bytesToHexString (responseArray));
+         console.log('开始监听');
+         console.log(bytesToHexString(responseArray));
 
      });
 
  }
 // 使用
-    const  Otaprocess = async () => {
-        // await characteristic.stopNotifications();
+    const  OtaProcess = async () => {
         await notify(characteristic);
         const PACKET_SIZE = 20;// 二进制数组
         const delay = 100; // ms
-        for(let i = 0; i < 60; i += PACKET_SIZE) {
-        // for(let i = 0; i < otaFile.byteLength; i += PACKET_SIZE) {
-            const packets = [];
+        // for(let i = 0; i < 60; i += PACKET_SIZE) {
+        for(let i = 0; i < otaFile.byteLength; i += PACKET_SIZE) {
             const start = i ;
             const end = start + PACKET_SIZE;
             const packet = otaFile.slice(start, end);
             await new Promise(resolve => setTimeout(resolve, delay));
-
-            packets.push(packet);
             // 直接在循环内发送
-            await sendPacket(i, packets);
+            await sendPacket(i, packet);
             console.log(i);
             if (i === otaFile.byteLength - 20){
-                // await  notify(characteristic);
+
                 setisFinished(true);
 
             }
@@ -156,9 +151,9 @@ function OTAPage() {
     const finishOTA = async () => {
 
             // 构建结束命令
-        const finishOTAdata = [0xF3, 0x01, 0x00,];
-          const checksum = calculateChecksum(finishOTAdata);// 计算并设置校验和
-            const newData = new Uint8Array([...finishOTAdata, checksum]);
+        const finishOTAData = [0xF3, 0x01, 0x00,];
+          const checksum = calculateChecksum(finishOTAData);// 计算并设置校验和
+            const newData = new Uint8Array([...finishOTAData, checksum]);
 
            try {
                await characteristic.writeValueWithoutResponse(newData);
@@ -174,7 +169,9 @@ function OTAPage() {
     useEffect(() => {
         let timer =0;
         if (sent < total) {
-            timer = setInterval( "100");
+            timer = setInterval(() => {
+                // 在此处执行发送操作
+            }, 100);
         } else {
             // 发送结束指令
             clearInterval(timer);
@@ -187,7 +184,7 @@ function OTAPage() {
             <div>
                 <Button variant="outlined" onClick={startScan}>Connect Device</Button>
                 <Button variant="outlined" onClick={startOTA}>startOTA</Button>
-                <Button variant="outlined" onClick={Otaprocess}>OTA</Button>
+                <Button variant="outlined" onClick={OtaProcess}>OTA</Button>
                 <Button variant="outlined" onClick={finishOTA}>finishOTA</Button>
             </div>
             <progress value={sent} max={total}></progress>
