@@ -57,8 +57,7 @@ function OTAPage() {
         lengthBytes[2] = (length >> 16) & 0xFF;
         lengthBytes[3] = (length >> 24) & 0xFF;
 
-
-        console.log(lengthBytes);     //39500
+        console.log(bytesToHexString(lengthBytes));     //39500
 // 构建启动命令
 
         const data = new Uint8Array([
@@ -97,32 +96,32 @@ function OTAPage() {
          const responseArray = Object.values(response);
          // 将响应数据设置为 ACK 状态的新值
          setACK(responseArray);
-         console.log('开始监听');
-         console.log(bytesToHexString(responseArray));
+         console.log(" ACK回调 :"+bytesToHexString(responseArray));
 
      });
 
  }
 // 使用
     const  OtaProcess = async () => {
-        await notify(characteristic);
         const PACKET_SIZE = 20;// 二进制数组
         const delay = 100; // ms
         // for(let i = 0; i < 60; i += PACKET_SIZE) {
-        for(let i = 0; i < otaFile.byteLength; i += PACKET_SIZE) {
-            const start = i ;
+        for (let i = 0; i <= otaFile.byteLength; i += PACKET_SIZE) {
+            const packets = [];
+            const start = i;
             const end = start + PACKET_SIZE;
             const packet = otaFile.slice(start, end);
             await new Promise(resolve => setTimeout(resolve, delay));
+
+            if (i === otaFile.byteLength) {
+                setisFinished(true);
+                console.log('Otaprocess finished');
+                break;
+            }
+            packets.push(packet);
             // 直接在循环内发送
             await sendPacket(i, packet);
             console.log(i);
-            if (i === otaFile.byteLength - 20){
-
-                setisFinished(true);
-
-            }
-
         }
         await finishOTA();
 
@@ -130,14 +129,13 @@ function OTAPage() {
 
     const sendPacket = async(index, packet) => {
         const packetBytes= new Uint8Array(packet);
-        console.log(packetBytes);
+        console.log(bytesToHexString(packetBytes));
         const newIndex= getPacketBytes(index);
         const data = new Uint8Array([
-            newIndex, // 2字节索引
+            ...newIndex,  // 2字节索引
             ...packetBytes // 数据
         ]);
 
-        // notify(characteristic);
         const checksum = calculateChecksum(data);// 计算并设置校验和
         const newData = new Uint8Array([...data, checksum]);
         try {
@@ -164,8 +162,6 @@ function OTAPage() {
            }
             
         }
-
-
     useEffect(() => {
         let timer =0;
         if (sent < total) {
