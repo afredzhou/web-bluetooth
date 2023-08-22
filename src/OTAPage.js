@@ -26,7 +26,6 @@ function OTAPage() {
     const [total, setTotal] = useState(0.001); // 总大小
     const progress = Math.round((sent / total) * 100);
     const sentRef = useRef(0);
-    const [isFinished, setisFinished] = useState(false);
     const startScan = async () => {
         try {
             const scannedDevice = await navigator.bluetooth.requestDevice({
@@ -62,7 +61,8 @@ function OTAPage() {
 // 构建启动命令
 
         const data = new Uint8Array([
-            0xF1, 0x02,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+            type,  // 1字节类型
+           0x02,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00
 
         ]);
         // 构建启动命令
