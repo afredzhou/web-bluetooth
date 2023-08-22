@@ -157,23 +157,25 @@ function OTAPage() {
             
         }
     useEffect(() => {
-        if (ACK[1]==0xF1 && ACK[2]==0x00 && characteristic) {
-            OtaProcess(characteristic);
-            setError('OTA started')
+        const notify = async (characteristic) => {
+            await characteristic.startNotifications();
+            await characteristic.addEventListener('characteristicvaluechanged', (event) => {
+                const dataView = new DataView(event.target.value.buffer);
+                const response = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
+                console.log(dataView);
+                const responseArray = Object.values(response);
+                const ackArray = new Uint8Array(dataView.buffer);
+                // 将响应数据设置为 ACK 状态的新值
+                setACK(responseArray);
+                setError(bytesToHexString(ackArray));
+                console.log(" ACK回调 :" + bytesToHexString(responseArray));
+            });
         };
-        if(ACK[0]=0xF3&&ACK[1]==0x01 ){
-            setError('OTA finished')
-            setTimeout(() => {  sentRef.current = 0; }, 1000);
-        };
-        if (ACK[0]==0xFC && ACK[2]!==0x00 ) {
-            setError('OTA failed')
-        };
-        if (characteristic) {
-            // 这里可以放置需要在 characteristic 发生变化时执行的代码
-            notify(characteristic);}
-        // console.log("ACK updated:"+ACK);
-        console.log("ACK updated:"+bytesToHexString(ACK));
-    }, [ACK,characteristic]);
+
+        // Rest of the code
+
+        // Include notify as a dependency
+    }, [ACK, characteristic, notify]);
     useEffect(() => {
         let timer;
         if (sentRef.current < total) {
