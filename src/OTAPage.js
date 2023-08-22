@@ -141,7 +141,7 @@ function OTAPage() {
     const finishOTA = async () => {
 
             // 构建结束命令
-        const finishOTAData = [0x00, 0x00, 0x00,];
+        const finishOTAData = [0x01, 0x00, 0x00,];
 
             const newData = new Uint8Array([...finishOTAData]);
 
