@@ -158,7 +158,6 @@ function OTAPage() {
         }
     useEffect(() => {
         if (ACK[1]==0xF1 && ACK[2]==0x00 && characteristic) {
-            OtaProcess(characteristic);
             setError('OTA started')
         };
         if(ACK[0]=0xF3&&ACK[1]==0x01 ){
