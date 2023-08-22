@@ -104,7 +104,7 @@ function OTAPage() {
 // 使用
     const  OtaProcess = async () => {
         const PACKET_SIZE = 20;// 二进制数组
-        const delay = 10; // ms
+        const delay = 5; // ms
         setError('OTA Proessing');
         // for(let i = 0; i < 60; i += PACKET_SIZE) {
         for (let i = 0; i <= otaFile.byteLength; i += PACKET_SIZE) {
