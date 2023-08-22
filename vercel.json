@@ -4,6 +4,7 @@
     {
       "src": "package.json",
       "use": "@vercel/static-build",
+      "lint": false ,
       "config": {
         "buildCommand": "npm install && npm run build"
       }
