@@ -1,116 +1,149 @@
 import React, {useEffect,useRef, useState} from 'react';
 import {
+    AppBar,
+    Toolbar,
     Button,
+    Grid,
     Typography,
 } from '@mui/material';
+import BluetoothIcon from '@mui/icons-material/Bluetooth';
 import LinearProgress from '@mui/material/LinearProgress';
+import {getPacketBytes} from './gextindex.js';
 import getOTAFile from './getOTAFile.js';
 import {bytesToHexString } from './gextindex'
+
 
 
 const SERVICE_UUID = '0000ff10-0000-1000-8000-00805f9b34fb';
 const CHAR_UUID = '0000ff11-0000-1000-8000-00805f9b34fb';
 
+
 function OTAPage() {
     const [otaFile, setOtaFile] = useState(null);
+
 
     useEffect(() => {
         getOTAFile().then( (value) => setOtaFile(value));
     }, []);
-    const [ACK, setACK] = useState([0x12, 0x34, 0x56]);
+
+    const [ACK, setACK] = useState([0,2,3]);
     const [characteristic, setCharacteristic] = useState(null);
-    const [device, setDevice] = useState(null);
-    const [server, setServer] = useState(null);
+    const [device, setDevice] =  useState(null)
     const [error,setError] = useState('Ready');
     const [sent, setSent] = useState(0); // 已发送数据大小
     const [total, setTotal] = useState(0.001); // 总大小
     const progress = Math.round((sent / total) * 100);
     const sentRef = useRef(0);
+    const [isConnected, setIsConnected] = useState(false);
+    const [rerenderToggle, setRerenderToggle] = useState(false);
+    const [devices, setDevices] = useState([]);
+    const [selectedDevice, setSelectedDevice] = useState(null);
+
+    const toggleRerender = () => {
+        setRerenderToggle((prevToggle) => !prevToggle);
+    };
+
+
+
     const startScan = async () => {
         try {
-            const scannedDevice = await navigator.bluetooth.requestDevice({
+            const device = await navigator.bluetooth.requestDevice({
                 filters: [{ namePrefix: 'Lumaflex' }],
                 optionalServices: [SERVICE_UUID]
             });
-            if (scannedDevice) {
-                setDevice(scannedDevice);
-                const server = await device.gatt.connect();
-                setServer(server);
-
-                // 其他代码
-
-            } else {
-                console.error('User canceled the request or no Bluetooth device was selected.');
-            }
+            setDevices([device]);
         } catch (error) {
-            console.error('Error occurred while requesting Bluetooth device:', error);
+            console.log('Error scanning for devices:', error);
         }
     };
 
+    const connectToDevice = async () => {
+        try {
+            if (selectedDevice) {
+                if (!isConnected) {
+                    // Connect device
+                    // ...
+                    await selectedDevice.gatt.connect();
+                    setDevice(device);
+                    const service = await selectedDevice.gatt.getPrimaryService(SERVICE_UUID);
+                    // 获取特征值
+                    const characteristic = await service.getCharacteristic(CHAR_UUID);
+                    setCharacteristic(characteristic);
+                    setError('Connected sucessfully.');
+                    // 其他代码
+                } else {
+                    // Disconnect device
+                    // ...
+                    selectedDevice.gatt.disconnect();
+                }
+                toggleRerender(); // 触发重新渲染
+            }
+        } catch (error) {
+            console.log('Error connecting/disconnecting device:', error);
+            setError('Try again Error occurred while requesting Bluetooth device:' + error);
+        }
+    };
+
+    const notify = async (characteristic) => {
+        let ackArray=[];   // Declare ackArray outside of the event listener
+        await characteristic.startNotifications();
+        new Promise(resolve =>
+            characteristic.addEventListener('characteristicvaluechanged', (event) => {
+                const dataView = new DataView(event.target.value.buffer);
+                const ackArray = new Uint8Array(dataView.buffer);
+                setError(bytesToHexString(ackArray));
+                // console.log("bytesToHexString:"+bytesToHexString(ackArray));
+                return resolve(ackArray);
+            })
+        ).then((ackArray) => {;
+            setACK(ackArray);// Use ackArray in setACK after the event listener has executed
+            // console.log("ackArray:"+ackArray);
+        })
+        ;}
 
 // 启动
     const startOTA = async () => {
         const type = 0x01; // 固件下载
-
 // 总长度
         const length = otaFile.byteLength;
         setTotal(length);
-        // 4字节小端序长度
-
-        console.log(bytesToHexString(length));     //39500
+        console.log(length);
+        //39192
 // 构建启动命令
 
         const data = new Uint8Array([
-            type,  // 1字节类型
-           0x02,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00
-
+            0xF1, // opcode
+            type, // 总长度
+            // 检验和 (省略)
         ]);
         // 构建启动命令
-        const service = await server.getPrimaryService(SERVICE_UUID);
-        // 获取特征值
-        const characteristic = await service.getCharacteristic(CHAR_UUID);
-        setCharacteristic(characteristic);
-        // console.log(characteristic);
-        await notify(characteristic);
-       // console.log(newData);
+
         // 写入数据
         try {
             if(characteristic.properties.writeWithoutResponse){
                 await characteristic.writeValueWithoutResponse(data);
-                setError('OTA Started');
+                setACK([0xFC,0xF1,0X00]);
+                setError("Start OTA");
+                console.log(ACK)
             }
-
         } catch (error) {
-            console.error('     Start OTA:', error);
+            console.error('Start OTA:', error);
         }
     }
 
-    const notify = async (characteristic) => {
-     await characteristic.startNotifications();
-     await characteristic.addEventListener('characteristicvaluechanged', (event) => {
-         const dataView = new DataView(event.target.value.buffer);
-         const response = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
-         console.log(dataView);
-         const responseArray = Object.values(response);
-         const ackArray = new Uint8Array(dataView.buffer);
-         // 将响应数据设置为 ACK 状态的新值
-         setACK(responseArray);
-         setError(bytesToHexString(ackArray));
-         console.log(" ACK回调 :"+bytesToHexString(responseArray));
 
-     });
-
- }
 // 使用
-    const  OtaProcess = async () => {
+    const  OtaProcess = async (characteristic) => {
         const PACKET_SIZE = 20;// 二进制数组
         const delay = 5; // ms
-        setError('OTA Proessing');
-        // for(let i = 0; i < 60; i += PACKET_SIZE) {
-        for (let i = 0; i <= otaFile.byteLength; i += PACKET_SIZE) {
-            const packet = [];
+        console.log(characteristic)
+        // for(let i = 0; i < 100; i += PACKET_SIZE) {
+        for (let i = 0; i < otaFile.byteLength; i += PACKET_SIZE) {
+            const packets = [1,2,2,3,4,5,6,7,8,9,10,11,12,12,34,56,78,90,10];
             await new Promise(resolve => setTimeout(resolve, delay));
-            await sendPacket(i, packet);
+            packets.push(packets);
+            // 直接在循环内发送
+            await sendPacket(i, packets,characteristic);
             console.log(i);
         }
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -118,46 +151,69 @@ function OTAPage() {
 
     }
 
-    const sendPacket = async(index, packet) => {
+    const sendPacket = async(index, packet,characteristic) => {
         const packetBytes= new Uint8Array(packet);
-        console.log(bytesToHexString(packetBytes));
 
         const data = new Uint8Array([
             index,  // 2字节索引
             ...packetBytes // 数据
         ]);
+        if(characteristic.properties.writeWithoutResponse){
+            try {
+                sentRef.current += packetBytes.length;
+                // 发送data
+                await characteristic.writeValueWithoutResponse(data);
 
-
-        const newData = new Uint8Array([...data]);
-        sentRef.current += 20;
-        try {
-            // 发送data
-            await characteristic.writeValueWithoutResponse(newData);
-
-        } catch (error) {
-            console.error('Error occurred while sending packet:', error);
+            } catch (error) {
+                console.error('Error occurred while sending packet:', error);
+            }
         }
     };
     const finishOTA = async () => {
-
-            // 构建结束命令
-        const finishOTAData = [0x01, 0x00, 0x00,];
-
-            const newData = new Uint8Array([...finishOTAData]);
-
-           try {
-               await characteristic.writeValueWithoutResponse(newData);
-               setError('OTA finished')
-               setTimeout(() => {  sentRef.current = 0; }, 2000);
-               // await device.gatt.disconnect();
-               console.log('OTA finish button pressed');
-           }catch (e) {
-               console.error('Error occurred while finished OTA:', e);
-           }
-            
+        // 构建结束命令
+        const data = new Uint8Array([
+            0xF3, 0x01, 0x00 // 总长度
+        ]);
+        try {
+            await characteristic.writeValueWithoutResponse(data);
+            setError(" OTA Finished");
+            setACK([0xF3,0x01,0X00]);
+            // await device.gatt.disconnect();
+        }catch (e) {
+            console.error('Error occurred while finished OTA:', e);
+            setError('Error occurred while finished OTA:' + e);
         }
+
+    }
+
+    const handleDeviceSelection = (device) => {
+        setSelectedDevice(device);
+        setIsConnected(device.isConnected);
+        toggleRerender(); // 触发重新渲染
+    };
+
+    useEffect(() => {
+        const handleConnectionStatus = () => {
+            setIsConnected(selectedDevice.isConnected);
+            toggleRerender(); // 触发重新渲染
+        };
+
+        if (selectedDevice) {
+            handleDeviceSelection(selectedDevice);
+            selectedDevice.addEventListener('gattserverdisconnected', handleConnectionStatus);
+            setIsConnected(selectedDevice.isConnected);
+            toggleRerender(); // 触发重新渲染
+        }
+
+        return () => {
+            if (selectedDevice) {
+                selectedDevice.removeEventListener('gattserverdisconnected', handleConnectionStatus);
+            }
+        };
+    }, [selectedDevice]);
     useEffect(() => {
         if (ACK[1]==0xF1 && ACK[2]==0x00 && characteristic) {
+            OtaProcess(characteristic);
             setError('OTA started')
         };
         if(ACK[0]=0xF3&&ACK[1]==0x01 ){
@@ -180,7 +236,7 @@ function OTAPage() {
                 // 在此处执行发送操作
                 setSent(sentRef.current);  // 这里可能需要更新 sentRef.current 的值
                 clearInterval(timer);  // 清除 setInterval
-            }, 100);
+            }, 5);
             timer = setInterval(() => {
                 // 在此处执行发送操作
                 // 使用 sentRef.current 来更新进度条的值
@@ -192,17 +248,45 @@ function OTAPage() {
             clearInterval(timer);  // 在组件卸载或重新渲染时清除 setInterval
         };
     }, [sent, total]);
-
     return (
         <div>
-            <div>
-                <Button variant="outlined" onClick={startScan}>Connect Device</Button>
-                <Button variant="outlined" onClick={startOTA}>startOTA</Button>
-                <Button variant="outlined" onClick={OtaProcess}>OTA</Button>
-                <Typography>{error}</Typography>
-            </div>
-            <LinearProgress variant="determinate" value={progress} />
-            <Typography>{progress}%</Typography>
+            <AppBar position="static">
+                <Toolbar>
+                    <Typography variant="h6">Bluetooth Device OTA</Typography>
+                </Toolbar>
+            </AppBar>
+            <Grid container spacing={3} p={3}>
+                <Grid item xs={12} sm={12}>
+                    <Button variant="outlined" onClick={startScan}>Connect Device</Button>
+                    <div style={{ marginTop: '24px',marginBottom:'24px' }}>
+                        {devices.map((device) => (
+                            <div
+                                style={{ display: 'flex', alignItems: 'center', marginBottom: '12px', cursor: 'pointer' }}
+                                key={device.id}
+                                onClick={() => handleDeviceSelection(device)}
+                            >
+                                <BluetoothIcon />
+                                <Typography sx={{ marginLeft: '12px' }}>
+                                    {device.name}
+                                </Typography>
+                            </div>
+                        ))}
+                    </div>
+                    {selectedDevice && (
+                        <div>
+                            <Button sx= {{ marginBottom:'24px'}} variant="contained" onClick={connectToDevice}>
+                                {isConnected ? 'Disconnect' : 'Connect'}
+                            </Button>
+                        </div>
+                    )}
+                    <Button variant="outlined" onClick={startOTA}>Start OTA</Button>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                    <LinearProgress variant="determinate" value={progress} />
+                    <Typography>{progress}%</Typography>
+                    <Typography>{error}</Typography>
+                </Grid>
+            </Grid>
         </div>
     );
 }
