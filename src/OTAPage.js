@@ -120,7 +120,7 @@ function OTAPage() {
 
         // 写入数据
         try {
-            if(characteristic.properties.writeWithoutResponse){
+            if(characteristic){
                 await characteristic.writeValue(data);
                 setACK([0xFC,0xF1,0X00]);
                 setError("Start OTA");
