@@ -158,7 +158,7 @@ function OTAPage() {
             index,  // 2字节索引
             ...packetBytes // 数据
         ]);
-        if(characteristic.properties.writeWithoutResponse){
+        if(characteristic){
             try {
                 sentRef.current += packetBytes.length;
                 // 发送data
