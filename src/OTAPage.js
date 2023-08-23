@@ -63,11 +63,12 @@ function OTAPage() {
                 if (!isConnected) {
                     // Connect device
                     // ...
-                    await selectedDevice.gatt.connect();
-                    setDevice(device);
-                    const service = await selectedDevice.gatt.getPrimaryService(SERVICE_UUID);
+                    const server = await selectedDevice.gatt.connect();
+                    setDevice(server);
+                    const service = await server.getPrimaryService(SERVICE_UUID);
                     // 获取特征值
                     const characteristic = await service.getCharacteristic(CHAR_UUID);
+
                     setCharacteristic(characteristic);
                     setError('Connected sucessfully.');
                     // 其他代码
