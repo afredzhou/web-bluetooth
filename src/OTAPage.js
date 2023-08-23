@@ -121,7 +121,7 @@ function OTAPage() {
         // 写入数据
         try {
             if(characteristic.properties.writeWithoutResponse){
-                await characteristic.writeValueWithoutResponse(data);
+                await characteristic.writeValue(data);
                 setACK([0xFC,0xF1,0X00]);
                 setError("Start OTA");
                 console.log(ACK)
@@ -162,7 +162,7 @@ function OTAPage() {
             try {
                 sentRef.current += packetBytes.length;
                 // 发送data
-                await characteristic.writeValueWithoutResponse(data);
+                await characteristic.writeValue(data);
 
             } catch (error) {
                 console.error('Error occurred while sending packet:', error);
@@ -175,7 +175,7 @@ function OTAPage() {
             0xF3, 0x01, 0x00 // 总长度
         ]);
         try {
-            await characteristic.writeValueWithoutResponse(data);
+            await characteristic.writeValue(data);
             setError(" OTA Finished");
             setACK([0xF3,0x01,0X00]);
             // await device.gatt.disconnect();
