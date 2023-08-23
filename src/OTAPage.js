@@ -77,7 +77,6 @@ function OTAPage() {
                     // ...
                     selectedDevice.gatt.disconnect();
                 }
-                toggleRerender(); // 触发重新渲染
             }
         } catch (error) {
             console.log('Error connecting/disconnecting device:', error);
